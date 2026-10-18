@@ -37,6 +37,7 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
     const [selectedSummaryBusiness, setSelectedSummaryBusiness] = useState<Business | null>(null);
     const [summaryTab, setSummaryTab] = useState<'formatted' | 'prompt' | 'raw'>('formatted');
     const [copiedSummary, setCopiedSummary] = useState(false);
+    const [rescrapingIds, setRescrapingIds] = useState<number[]>([]);
 
     const handleCopyText = (text: string) => {
         if (!text) return;
@@ -65,6 +66,16 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
         };
     }, []);
 
+    // Clear rescraping state once business status updates to ready or failed
+    useEffect(() => {
+        setRescrapingIds((prev) =>
+            prev.filter((id) => {
+                const b = businesses.find((biz) => biz.id === id);
+                return b && (b.status === 'pending' || b.status === 'scraping' || b.status === 'summarizing');
+            })
+        );
+    }, [businesses]);
+
     // Fallback polling if any business is currently scraping or summarizing
     useEffect(() => {
         const hasProcessing = businesses.some(
@@ -91,8 +102,24 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
     };
 
     const handleRescrape = (businessId: number) => {
-        post(`/admin/businesses/${businessId}/rescrape`);
+        setRescrapingIds((prev) => (prev.includes(businessId) ? prev : [...prev, businessId]));
+        router.post(
+            `/admin/businesses/${businessId}/rescrape`,
+            {},
+            {
+                preserveScroll: true,
+                onError: () => {
+                    setRescrapingIds((prev) => prev.filter((id) => id !== businessId));
+                },
+            }
+        );
     };
+
+    const isBusinessRescraping = (business: Business) =>
+        rescrapingIds.includes(business.id) ||
+        business.status === 'pending' ||
+        business.status === 'scraping' ||
+        business.status === 'summarizing';
 
     const handleDelete = (business: Business) => {
         if (confirm(`Are you sure you want to delete ${business.name} and all its AI data?`)) {
@@ -311,14 +338,30 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
                                                         </button>
                                                     )}
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRescrape(business.id)}
-                                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shadow-2xs"
-                                                        title="Re-scrape Website"
-                                                    >
-                                                        <RefreshCw className="h-3.5 w-3.5" />
-                                                    </button>
+                                                    {(() => {
+                                                        const isRescraping = isBusinessRescraping(business);
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRescrape(business.id)}
+                                                                disabled={isRescraping}
+                                                                className={cn(
+                                                                    'inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold shadow-2xs transition',
+                                                                    isRescraping
+                                                                        ? 'cursor-not-allowed opacity-60 bg-muted text-muted-foreground pointer-events-none'
+                                                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                                                )}
+                                                                title={isRescraping ? 'Re-scraping in progress...' : 'Re-scrape Website'}
+                                                            >
+                                                                <RefreshCw
+                                                                    className={cn(
+                                                                        'h-3.5 w-3.5',
+                                                                        isRescraping && 'animate-spin text-primary'
+                                                                    )}
+                                                                />
+                                                            </button>
+                                                        );
+                                                    })()}
 
                                                     <button
                                                         type="button"
