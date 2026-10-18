@@ -14,12 +14,18 @@ import {
     Eye,
     AlertTriangle,
     Layers,
+    BookOpen,
+    Copy,
+    Check,
+    FileText,
+    Terminal,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import type { Business, BusinessStatus } from '@/types/business';
-
+import { cn } from '@/lib/utils';
 import { getEchoInstance } from '@/lib/echo';
 
 interface BusinessesIndexProps {
@@ -29,6 +35,15 @@ interface BusinessesIndexProps {
 export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProps) {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedSummaryBusiness, setSelectedSummaryBusiness] = useState<Business | null>(null);
+    const [summaryTab, setSummaryTab] = useState<'formatted' | 'prompt' | 'raw'>('formatted');
+    const [copiedSummary, setCopiedSummary] = useState(false);
+
+    const handleCopyText = (text: string) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text);
+        setCopiedSummary(true);
+        setTimeout(() => setCopiedSummary(false), 2000);
+    };
 
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
@@ -133,14 +148,7 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
     };
 
     return (
-        <AppLayout
-            breadcrumbs={[
-                {
-                    title: 'Business AI Boards',
-                    href: dashboard(),
-                },
-            ]}
-        >
+        <>
             <Head title="Business AI Boards Admin" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -290,7 +298,11 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
                                                     {business.summary && (
                                                         <button
                                                             type="button"
-                                                            onClick={() => setSelectedSummaryBusiness(business)}
+                                                            onClick={() => {
+                                                                setSelectedSummaryBusiness(business);
+                                                                setSummaryTab('formatted');
+                                                                setCopiedSummary(false);
+                                                            }}
                                                             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shadow-2xs"
                                                             title="Inspect AI Knowledge"
                                                         >
@@ -414,54 +426,240 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
 
             {/* Modal: View AI Knowledge Base */}
             {selectedSummaryBusiness && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-                    <div className="flex flex-col h-[85vh] w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 sm:p-6">
+                    <div className="flex flex-col h-[88vh] w-full max-w-3xl rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                        {/* Modal Header */}
                         <div className="flex items-center justify-between border-b border-border px-6 py-4">
-                            <div className="flex items-center gap-2.5">
-                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                    <Sparkles className="h-4 w-4" />
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
+                                    <Sparkles className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-foreground text-base">
-                                        {selectedSummaryBusiness.name} Knowledge Base
-                                    </h3>
-                                    <div className="text-xs text-muted-foreground">
-                                        Synthesized from {selectedSummaryBusiness.website_url}
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-semibold text-foreground text-base tracking-tight">
+                                            {selectedSummaryBusiness.name} Knowledge Base
+                                        </h3>
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                                            {selectedSummaryBusiness.status}
+                                        </span>
                                     </div>
+                                    <a
+                                        href={selectedSummaryBusiness.website_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition mt-0.5"
+                                    >
+                                        <span>{selectedSummaryBusiness.website_url}</span>
+                                        <ExternalLink className="h-3 w-3" />
+                                    </a>
                                 </div>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setSelectedSummaryBusiness(null)}
-                                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition"
                             >
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                            <div className="rounded-xl border border-border bg-muted/30 p-4">
-                                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    Dossier & Summary
-                                </h4>
-                                <div className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">
-                                    {selectedSummaryBusiness.summary}
-                                </div>
+                        {/* Navigation Tabs & Actions Bar */}
+                        <div className="flex items-center justify-between border-b border-border bg-muted/20 px-6 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setSummaryTab('formatted')}
+                                    className={cn(
+                                        'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                                        summaryTab === 'formatted'
+                                            ? 'bg-background text-foreground shadow-xs border border-border/80'
+                                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                                    )}
+                                >
+                                    <BookOpen className="h-3.5 w-3.5 text-primary" />
+                                    Formatted Knowledge Base
+                                </button>
+                                {selectedSummaryBusiness.system_prompt && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSummaryTab('prompt')}
+                                        className={cn(
+                                            'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                                            summaryTab === 'prompt'
+                                                ? 'bg-background text-foreground shadow-xs border border-border/80'
+                                                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                                        )}
+                                    >
+                                        <Terminal className="h-3.5 w-3.5 text-amber-500" />
+                                        AI System Prompt
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setSummaryTab('raw')}
+                                    className={cn(
+                                        'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                                        summaryTab === 'raw'
+                                            ? 'bg-background text-foreground shadow-xs border border-border/80'
+                                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                                    )}
+                                >
+                                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                    Raw Markdown
+                                </button>
                             </div>
 
-                            {selectedSummaryBusiness.system_prompt && (
-                                <div className="rounded-xl border border-border bg-muted/20 p-4">
-                                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                        Active AI System Prompt
-                                    </h4>
-                                    <div className="whitespace-pre-wrap font-mono text-xs text-muted-foreground leading-relaxed bg-background/50 p-3 rounded-lg border border-border/50">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const textToCopy =
+                                        summaryTab === 'prompt'
+                                            ? selectedSummaryBusiness.system_prompt ?? ''
+                                            : selectedSummaryBusiness.summary ?? '';
+                                    handleCopyText(textToCopy);
+                                }}
+                                className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition shadow-2xs"
+                                title="Copy content to clipboard"
+                            >
+                                {copiedSummary ? (
+                                    <>
+                                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Copy className="h-3.5 w-3.5" />
+                                        <span>Copy</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                            {summaryTab === 'formatted' && (
+                                <div className="rounded-xl border border-border bg-card p-6 shadow-xs">
+                                    <div className="prose prose-sm dark:prose-invert max-w-none text-foreground break-words space-y-3">
+                                        <ReactMarkdown
+                                            components={{
+                                                h1: ({ children }) => (
+                                                    <h1 className="text-lg font-bold text-foreground mt-2 mb-3 pb-2 border-b border-border/60">
+                                                        {children}
+                                                    </h1>
+                                                ),
+                                                h2: ({ children }) => (
+                                                    <h2 className="text-base font-bold text-foreground mt-4 mb-2 pb-1 border-b border-border/40 flex items-center gap-2">
+                                                        {children}
+                                                    </h2>
+                                                ),
+                                                h3: ({ children }) => (
+                                                    <h3 className="text-sm font-semibold text-primary mt-4 mb-2 flex items-center gap-1.5">
+                                                        {children}
+                                                    </h3>
+                                                ),
+                                                p: ({ children }) => (
+                                                    <p className="mb-2.5 text-sm text-foreground/90 leading-relaxed last:mb-0">
+                                                        {children}
+                                                    </p>
+                                                ),
+                                                ul: ({ children }) => (
+                                                    <ul className="my-2.5 ml-5 list-disc space-y-1.5 text-sm text-foreground/90">
+                                                        {children}
+                                                    </ul>
+                                                ),
+                                                ol: ({ children }) => (
+                                                    <ol className="my-2.5 ml-5 list-decimal space-y-1.5 text-sm text-foreground/90">
+                                                        {children}
+                                                    </ol>
+                                                ),
+                                                li: ({ children }) => (
+                                                    <li className="leading-relaxed pl-1 text-foreground/90">
+                                                        {children}
+                                                    </li>
+                                                ),
+                                                strong: ({ children }) => (
+                                                    <strong className="font-semibold text-foreground">
+                                                        {children}
+                                                    </strong>
+                                                ),
+                                                a: ({ href, children }) => (
+                                                    <a
+                                                        href={href}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-primary font-medium underline underline-offset-2 hover:opacity-80 transition inline-flex items-center gap-1"
+                                                    >
+                                                        {children}
+                                                        <ExternalLink className="inline h-3 w-3" />
+                                                    </a>
+                                                ),
+                                                hr: () => <hr className="my-4 border-border/60" />,
+                                                code: ({ children }) => (
+                                                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground border border-border/50">
+                                                        {children}
+                                                    </code>
+                                                ),
+                                                blockquote: ({ children }) => (
+                                                    <blockquote className="border-l-3 border-primary/50 bg-muted/20 pl-3.5 py-1 italic text-muted-foreground my-2 rounded-r-md">
+                                                        {children}
+                                                    </blockquote>
+                                                ),
+                                            }}
+                                        >
+                                            {selectedSummaryBusiness.summary || '_No knowledge base summary available yet._'}
+                                        </ReactMarkdown>
+                                    </div>
+                                </div>
+                            )}
+
+                            {summaryTab === 'prompt' && selectedSummaryBusiness.system_prompt && (
+                                <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
+                                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
+                                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                            Active AI Instructions
+                                        </h4>
+                                        <span className="text-[11px] text-muted-foreground font-mono">
+                                            {selectedSummaryBusiness.system_prompt.length} characters
+                                        </span>
+                                    </div>
+                                    <div className="whitespace-pre-wrap font-mono text-xs text-muted-foreground leading-relaxed bg-muted/30 p-4 rounded-lg border border-border/50">
                                         {selectedSummaryBusiness.system_prompt}
+                                    </div>
+                                </div>
+                            )}
+
+                            {summaryTab === 'raw' && (
+                                <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
+                                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
+                                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                            Raw Markdown Source
+                                        </h4>
+                                        <span className="text-[11px] text-muted-foreground font-mono">
+                                            {selectedSummaryBusiness.summary?.length ?? 0} characters
+                                        </span>
+                                    </div>
+                                    <div className="whitespace-pre-wrap font-mono text-xs text-muted-foreground leading-relaxed bg-muted/30 p-4 rounded-lg border border-border/50 overflow-x-auto">
+                                        {selectedSummaryBusiness.summary}
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="border-t border-border px-6 py-3 flex justify-end">
+                        {/* Modal Footer */}
+                        <div className="border-t border-border px-6 py-3.5 flex items-center justify-between bg-muted/10">
+                            <div>
+                                {selectedSummaryBusiness.status === 'ready' && (
+                                    <a
+                                        href={`/?business=${selectedSummaryBusiness.slug}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition shadow-2xs"
+                                    >
+                                        <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                                        Test in Chat Board
+                                    </a>
+                                )}
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setSelectedSummaryBusiness(null)}
@@ -473,6 +671,6 @@ export default function BusinessesIndex({ businesses = [] }: BusinessesIndexProp
                     </div>
                 </div>
             )}
-        </AppLayout>
+        </>
     );
 }

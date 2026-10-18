@@ -26,4 +26,4 @@ Route::prefix('api/internal/chat')->group(function (): void {
     Route::post('/message', [InternalChatController::class, 'storeMessage'])->name('internal.chat.message');
 });
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';
