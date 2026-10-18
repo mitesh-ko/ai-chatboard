@@ -108,14 +108,23 @@ class ChatBoardController extends Controller
 
         $session = $getOrCreateSessionAction->execute($dto);
 
-        $assistantMessage = $processChatMessageAction->execute(
+        $pair = $processChatMessageAction->executeWithPair(
             $business,
             $session,
             (string) $validated['message']
         );
 
+        $userMessage = $pair['user_message'];
+        $assistantMessage = $pair['assistant_message'];
+
         return response()->json([
             'status' => 'success',
+            'user_message' => [
+                'id' => $userMessage->id,
+                'role' => $userMessage->role->value,
+                'content' => $userMessage->content,
+                'created_at' => $userMessage->created_at?->toISOString(),
+            ],
             'message' => [
                 'id' => $assistantMessage->id,
                 'role' => $assistantMessage->role->value,

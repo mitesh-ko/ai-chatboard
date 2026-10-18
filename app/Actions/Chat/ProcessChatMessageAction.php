@@ -23,9 +23,11 @@ class ProcessChatMessageAction
     ) {}
 
     /**
-     * Process an incoming user message, store it, trigger AI inference, and broadcast responses.
+     * Process an incoming user message and return both user and assistant messages.
+     *
+     * @return array{user_message: ChatMessage, assistant_message: ChatMessage}
      */
-    public function execute(Business $business, ChatSession $session, string $userContent): ChatMessage
+    public function executeWithPair(Business $business, ChatSession $session, string $userContent): array
     {
         $sessionToken = $session->session_token;
 
@@ -64,7 +66,18 @@ class ProcessChatMessageAction
             // Silently continue if broadcaster is unconfigured
         }
 
-        return $assistantMessage;
+        return [
+            'user_message' => $userMessage,
+            'assistant_message' => $assistantMessage,
+        ];
+    }
+
+    /**
+     * Process an incoming user message, store it, trigger AI inference, and broadcast responses.
+     */
+    public function execute(Business $business, ChatSession $session, string $userContent): ChatMessage
+    {
+        return $this->executeWithPair($business, $session, $userContent)['assistant_message'];
     }
 
     /**

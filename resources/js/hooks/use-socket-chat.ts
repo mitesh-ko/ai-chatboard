@@ -87,10 +87,30 @@ export function useSocketChat({ businessId }: UseChatOptions) {
         channel.listen('.ChatMessageCreated', (data: { message: ChatMessage; session_token: string }) => {
             if (data.session_token === sessionTokenRef.current) {
                 setMessages((prev) => {
-                    // Prevent duplicate if already exists
-                    if (prev.some((m) => m.id === data.message.id)) {
+                    // Check if already in list by ID
+                    if (prev.some((m) => String(m.id) === String(data.message.id))) {
                         return prev;
                     }
+
+                    // If user message, replace matching optimistic temp message instead of appending duplicate
+                    if (data.message.role === 'user') {
+                        const tempIndex = prev.findIndex(
+                            (m) => String(m.id).startsWith('temp-') && m.content === data.message.content
+                        );
+                        if (tempIndex !== -1) {
+                            const updated = [...prev];
+                            updated[tempIndex] = data.message;
+                            return updated;
+                        }
+                    }
+
+                    // If assistant message, prevent duplicate if already in state
+                    if (data.message.role === 'assistant') {
+                        if (prev.some((m) => m.role === 'assistant' && m.content === data.message.content)) {
+                            return prev;
+                        }
+                    }
+
                     return [...prev, data.message];
                 });
             }
@@ -114,9 +134,10 @@ export function useSocketChat({ businessId }: UseChatOptions) {
             const trimmed = text.trim();
             if (!trimmed || !businessId) return;
 
-            // Optimistically add user message
+            // Optimistically add user message with unique temp ID
+            const tempId = 'temp-' + Date.now();
             const tempUserMsg: ChatMessage = {
-                id: 'temp-' + Date.now(),
+                id: tempId,
                 role: 'user',
                 content: trimmed,
                 created_at: new Date().toISOString(),
@@ -127,12 +148,19 @@ export function useSocketChat({ businessId }: UseChatOptions) {
             setError(null);
 
             try {
+                const echo = getEchoInstance();
+                const socketId = echo?.socketId();
+                const headers: Record<string, string> = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                };
+                if (socketId) {
+                    headers['X-Socket-ID'] = socketId;
+                }
+
                 const res = await fetch('/chat/message', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                    },
+                    headers,
                     body: JSON.stringify({
                         business_id: businessId,
                         session_token: sessionToken,
@@ -146,16 +174,44 @@ export function useSocketChat({ businessId }: UseChatOptions) {
                 }
 
                 const data = await res.json();
+
+                // If backend returned the persisted user_message, update the temp message with real DB ID
+                if (data.user_message) {
+                    setMessages((prev) => {
+                        const idx = prev.findIndex(
+                            (m) => m.id === tempId || (String(m.id).startsWith('temp-') && m.content === trimmed)
+                        );
+                        if (idx !== -1) {
+                            const next = [...prev];
+                            next[idx] = data.user_message;
+                            return next;
+                        }
+                        if (!prev.some((m) => String(m.id) === String(data.user_message.id))) {
+                            return [...prev, data.user_message];
+                        }
+                        return prev;
+                    });
+                }
+
+                // If backend returned the assistant message, add it if not already present
                 if (data.message) {
                     setMessages((prev) => {
                         // Prevent duplicate if Pusher already delivered it
-                        if (prev.some((m) => m.id === data.message.id)) {
+                        if (
+                            prev.some(
+                                (m) =>
+                                    String(m.id) === String(data.message.id) ||
+                                    (m.role === 'assistant' && m.content === data.message.content)
+                            )
+                        ) {
                             return prev;
                         }
                         return [...prev, data.message];
                     });
                 }
             } catch (err: unknown) {
+                // If message failed to send, remove optimistic message
+                setMessages((prev) => prev.filter((m) => m.id !== tempId));
                 const message = err instanceof Error ? err.message : 'Failed to send message';
                 console.error('[Send Message Error]', message);
                 setError(message);
